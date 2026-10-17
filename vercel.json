@@ -1,18 +1,9 @@
 {
-  "version": 2,
-  "name": "switch-power-controller",
-  "routes": [
+  "cleanUrls": true,
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/agent",
-      "dest": "/api/agent/install"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
+      "source": "/agent",
+      "destination": "/api/agent/install"
     }
   ],
   "headers": [
