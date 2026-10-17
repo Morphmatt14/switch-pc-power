@@ -4,7 +4,7 @@
 # =====================================================================
 
 param(
-    [string]$CloudUrl = "https://switch-pc-power.vercel.app",
+    [string]$CloudUrl = "https://switch-app-morphmatt14s-projects.vercel.app",
     [string]$DeviceId = "morphy-host",
     [int]$PollInterval = 2,
     [switch]$Silent = $false
@@ -35,7 +35,7 @@ function Send-WakeOnLanPacket {
         $UdpClient = [System.Net.Sockets.UdpClient]::new()
         $UdpClient.EnableBroadcast = $true
 
-        # Targets: primary broadcast, local subnet, gaming pc subnet, global broadcast
+        # Transmit to multiple targets to guarantee cross-subnet delivery
         $Targets = @($BroadcastAddress, "192.168.254.255", "192.168.68.255", "192.168.254.112", "192.168.68.62", "255.255.255.255")
         
         for ($burst = 0; $burst -lt 4; $burst++) {
@@ -56,29 +56,29 @@ function Send-WakeOnLanPacket {
     }
 }
 
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "   SWITCH HOST CLOUD BRIDGE (Morphy PC - Windows 11)     " -ForegroundColor White
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Cloud Hub:  $CloudUrl" -ForegroundColor Green
-Write-Host " Device ID:  $DeviceId" -ForegroundColor Yellow
-Write-Host " Hostname:   $HostName" -ForegroundColor Yellow
-Write-Host " Polling:    Every $PollInterval seconds" -ForegroundColor Gray
-Write-Host " Mode:       Listening for Cloud WoL & Shutdown commands" -ForegroundColor Cyan
-Write-Host "==========================================================" -ForegroundColor Cyan
-
-$UrlConfigFile = Join-Path $PSScriptRoot "VERCEL_URL.txt"
-if (Test-Path $UrlConfigFile) {
-    $SavedUrl = (Get-Content $UrlConfigFile -Raw).Trim()
-    if ($SavedUrl -match "^https?://") {
-        $CloudUrl = $SavedUrl
-        Write-Host "[CONFIG] Loaded Cloud URL from VERCEL_URL.txt: $CloudUrl" -ForegroundColor Cyan
-    }
+if (-not $Silent) {
+    Write-Host "==========================================================" -ForegroundColor Cyan
+    Write-Host "   SWITCH HOST CLOUD BRIDGE (Morphy PC - Windows 11)     " -ForegroundColor White
+    Write-Host "==========================================================" -ForegroundColor Cyan
+    Write-Host " Cloud Hub:  $CloudUrl" -ForegroundColor Green
+    Write-Host " Device ID:  $DeviceId" -ForegroundColor Yellow
+    Write-Host " Hostname:   $HostName" -ForegroundColor Yellow
+    Write-Host " Polling:    Every $PollInterval seconds" -ForegroundColor Gray
+    Write-Host " Status:     Connected & Listening for Remote Commands" -ForegroundColor Green
+    Write-Host "==========================================================" -ForegroundColor Cyan
 }
+
+$ConsecutiveErrors = 0
 
 while ($true) {
     try {
         $Uri = "$CloudUrl/api/agent/poll?deviceId=$DeviceId&hostname=$([System.Uri]::EscapeDataString($HostName))&role=host"
         $Response = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
+
+        if ($ConsecutiveErrors -gt 0) {
+            $ConsecutiveErrors = 0
+            if (-not $Silent) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Reconnected to Vercel Cloud Hub (OK)" -ForegroundColor Green }
+        }
 
         if ($Response -and $Response.success) {
             $Cmd = $Response.command
@@ -100,7 +100,10 @@ while ($true) {
         }
     }
     catch {
-        # Quiet heartbeat error handling
+        $ConsecutiveErrors++
+        if ($ConsecutiveErrors -le 2 -and -not $Silent) {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Polling: $_" -ForegroundColor DarkGray
+        }
     }
 
     Start-Sleep -Seconds $PollInterval
