@@ -1,0 +1,1710 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SWITCH - Remote PC Power Controller (Multi-PC)</title>
+  <meta name="description" content="Self-hosted Remote PC Power Controller with Cloudflare Internet Tunnel, Multi-PC Wake-on-LAN and Windows Remote Shutdown.">
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      background-color: #0b0f19;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.14) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.10) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(239, 68, 68, 0.08) 0px, transparent 50%);
+      background-attachment: fixed;
+    }
+    .glass-card {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-modal {
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(75, 85, 99, 0.6);
+      border-radius: 9999px;
+    }
+    .shake {
+      animation: shake 0.4s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-white antialiased">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+      <!-- Brand Logo -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-emerald-400 p-[1.5px] shadow-lg shadow-indigo-500/20">
+          <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+            <i data-lucide="power" class="w-5 h-5 text-emerald-400"></i>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">SWITCH</h1>
+            <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Multi-PC Pro</span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Remote PC Power Controller</p>
+        </div>
+      </div>
+
+      <!-- Header Actions: Status, Phone QR, Info & PIN -->
+      <div class="flex items-center space-x-2 sm:space-x-2.5">
+        <!-- Live Connection Pill -->
+        <div id="connectionPill" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="connectionText">ONLINE</span>
+        </div>
+
+        <!-- Phone Access / QR Code Button -->
+        <button id="btnOpenQrModal" onclick="openQrModal()" title="Open Phone Access QR Code" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 transition">
+          <i data-lucide="smartphone" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span class="hidden sm:inline">Phone Access</span>
+        </button>
+
+        <!-- Remote Power Guide Info Trigger -->
+        <button onclick="openInfoModal()" title="How Remote Power Works" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white transition">
+          <i data-lucide="help-circle" class="w-4 h-4 text-amber-400"></i>
+        </button>
+
+        <!-- PIN Settings Trigger -->
+        <button id="pinStatusBtn" onclick="openPinModal()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300">
+          <i data-lucide="shield-check" id="pinIcon" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span id="pinBtnText">PIN Saved</span>
+        </button>
+
+        <!-- Refresh Button -->
+        <button onclick="fetchStatus(true)" title="Refresh System Status" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-400 hover:text-white transition">
+          <i data-lucide="refresh-cw" id="refreshIcon" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Emergency Countdown Alert Banner (Visible only during pending shutdown) -->
+  <div id="shutdownAlertBanner" class="hidden bg-gradient-to-r from-rose-950 via-rose-900 to-amber-950 border-b border-rose-500/40 text-white px-4 py-3 shadow-2xl relative z-30 transition-all duration-300">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center animate-bounce">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-400"></i>
+        </div>
+        <div>
+          <div class="font-bold text-sm tracking-wide flex items-center gap-2">
+            <span>WINDOWS SHUTDOWN IN PROGRESS FOR <span id="shutdownDeviceNameDisplay" class="text-amber-300 underline uppercase">THIS PC</span></span>
+            <span id="countdownNumber" class="text-xl font-extrabold text-amber-300 font-mono animate-pulse">10s</span>
+          </div>
+          <p class="text-xs text-rose-200/90">Graceful shutdown command active. PC will turn off shortly.</p>
+        </div>
+      </div>
+      <button onclick="triggerAbortShutdown()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-2 shadow-lg shadow-amber-500/30 transition-transform active:scale-95">
+        <i data-lucide="x-circle" class="w-4 h-4"></i>
+        <span>CANCEL SHUTDOWN NOW</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Public Internet Tunnel Status Banner (Visible when Cloudflare Tunnel is connected) -->
+  <div id="publicTunnelBanner" class="hidden bg-gradient-to-r from-indigo-950/90 via-slate-900/90 to-brand-950/90 border-b border-indigo-500/30 px-4 py-2.5">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+      <div class="flex items-center space-x-2.5 truncate">
+        <span class="flex h-2 w-2 relative flex-shrink-0">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-semibold text-indigo-300 flex-shrink-0">Public Phone Link:</span>
+        <a id="tunnelUrlLink" href="#" target="_blank" class="font-mono text-emerald-400 hover:text-emerald-300 underline truncate">https://...</a>
+      </div>
+      <div class="flex items-center space-x-2 flex-shrink-0">
+        <button onclick="copyTunnelUrl()" class="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-500/30 flex items-center gap-1 font-medium transition">
+          <i data-lucide="copy" class="w-3 h-3"></i>
+          <span>Copy Phone URL</span>
+        </button>
+        <button onclick="openQrModal()" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/30 flex items-center gap-1 font-medium transition">
+          <i data-lucide="qr-code" class="w-3 h-3"></i>
+          <span>Scan QR</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content Dashboard -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+
+    <!-- PC Selector Bar (Multi-Device Switcher) -->
+    <div class="glass-card rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-center space-x-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
+        <i data-lucide="server" class="w-4 h-4 text-brand-400"></i>
+        <span>Select Target Computer:</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2" id="deviceTabsContainer">
+        <!-- Rendered dynamically -->
+      </div>
+      <button onclick="openAddDeviceModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition">
+        <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+        <span>Add PC</span>
+      </button>
+    </div>
+
+    <!-- Active Target Machine Overview Card -->
+    <div class="glass-card rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden border border-slate-800">
+      <div class="absolute -right-16 -top-16 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span id="targetRoleBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+              <i data-lucide="monitor" class="w-3.5 h-3.5 mr-1.5 text-emerald-400"></i>
+              Active Target
+            </span>
+            <span id="targetIpBadge" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">192.168.254.101</span>
+            <span id="targetReachabilityPill" class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Checking...
+            </span>
+          </div>
+          <h2 id="targetNameHeading" class="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            Morphy PC (Host Windows 11)
+          </h2>
+          <p id="targetAdapterDescription" class="text-xs sm:text-sm text-slate-400">Realtek Gaming 2.5GbE Family Controller</p>
+          
+          <!-- Remote Agent Status Banner for Remote Targets -->
+          <div id="remoteAgentBanner" class="hidden mt-2.5 pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center space-x-2">
+              <span id="remoteAgentStatusIcon" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              <span id="remoteAgentStatusText" class="text-xs font-semibold text-slate-200">Checking Agent...</span>
+              <span id="remoteAgentSubText" class="text-[11px] text-slate-400 hidden sm:inline">• Enables 1-click shutdown across subnets</span>
+            </div>
+            <button id="btnConnectAgent" onclick="openAgentSetupModal()" class="px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition">
+              <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Connect Agent</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Host Metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-slate-400 mb-1 flex items-center gap-1.5">
+              <i data-lucide="clock" class="w-3.5 h-3.5 text-brand-400"></i>
+              <span>Host Uptime</span>
+            </div>
+            <div id="statUptime" class="font-mono font-semibold text-slate-200">Loading...</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-slate-400 mb-1 flex items-center gap-1.5">
+              <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Server Clock</span>
+            </div>
+            <div id="statServerTime" class="font-mono font-semibold text-slate-200">--:--:--</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 col-span-2 sm:col-span-1">
+            <div class="text-slate-400 mb-1 flex items-center gap-1.5">
+              <i data-lucide="cpu" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Memory Free</span>
+            </div>
+            <div id="statMemory" class="font-mono font-semibold text-slate-200">-- MB / --%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Power Control Action Deck -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+
+      <!-- Power ON Card (Wake-on-LAN) -->
+      <div class="glass-card rounded-2xl p-6 flex flex-col justify-between relative group hover:border-emerald-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <i data-lucide="zap" class="w-6 h-6 text-emerald-400"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Magic Packet</span>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Power ON</h3>
+            <p class="text-xs text-slate-400 mt-1">Transmits UDP Wake-on-LAN broadcast packets (Port 9 & 7) to wake <span id="powerOnTargetLabel" class="text-emerald-400 font-semibold">this PC</span> from Sleep, Hibernate, or Soft-Off (S5).</p>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 text-xs font-mono space-y-1">
+            <div class="text-slate-400 text-[10px] uppercase tracking-wider">Target Physical Address (MAC)</div>
+            <div class="text-emerald-400 font-semibold flex items-center justify-between">
+              <span id="cardMacDisplay">F4:B5:20:7A:FA:EF</span>
+              <button onclick="copyToClipboard(currentActiveDevice.mac, 'MAC Address')" title="Copy MAC" class="text-slate-400 hover:text-white">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-800/80">
+          <button id="btnPowerOn" onclick="triggerWakeOnLan()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-semibold text-sm shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
+            <i data-lucide="power" class="w-4 h-4"></i>
+            <span>SEND POWER ON (WOL)</span>
+          </button>
+          <button type="button" onclick="openWolGuideModal()" class="w-full mt-2.5 text-center text-[11px] text-emerald-400/90 hover:text-emerald-300 underline underline-offset-2 flex items-center justify-center gap-1 transition">
+            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+            <span>PC won't turn on? (Check 4 WoL Fixes)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Power OFF Card (Graceful Windows Shutdown) -->
+      <div class="glass-card rounded-2xl p-6 flex flex-col justify-between relative group hover:border-rose-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <i data-lucide="power-off" class="w-6 h-6 text-rose-400"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">Graceful (10s)</span>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Power OFF</h3>
+            <p class="text-xs text-slate-400 mt-1">Executes Windows graceful shutdown on <span id="powerOffTargetLabel" class="text-rose-400 font-semibold">this PC</span> with a 10-second safety abort window.</p>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 text-xs font-mono space-y-1">
+            <div class="text-slate-400 text-[10px] uppercase tracking-wider">Command Sequence</div>
+            <div id="cardShutdownCommand" class="text-rose-300 font-semibold truncate">shutdown.exe /s /t 10</div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-800/80">
+          <button id="btnPowerOff" onclick="confirmShutdownModal()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-sm shadow-lg shadow-rose-600/20 hover:shadow-rose-600/40 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+            <span>SHUT DOWN PC</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Cancel Shutdown Card (Abort) -->
+      <div class="glass-card rounded-2xl p-6 flex flex-col justify-between relative group hover:border-amber-500/40 transition-all duration-300">
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <i data-lucide="shield-alert" class="w-6 h-6 text-amber-400"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Emergency</span>
+          </div>
+
+          <div>
+            <h3 class="text-lg font-bold text-white tracking-tight">Cancel Shutdown</h3>
+            <p class="text-xs text-slate-400 mt-1">Immediately cancels in-progress shutdown sequence for <span id="abortTargetLabel" class="text-amber-300 font-semibold">this PC</span>.</p>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 text-xs font-mono space-y-1">
+            <div class="text-slate-400 text-[10px] uppercase tracking-wider">Abort Command</div>
+            <div id="cardAbortCommand" class="text-amber-300 font-semibold truncate">shutdown.exe /a</div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-800/80">
+          <button id="btnAbort" onclick="triggerAbortShutdown()" class="w-full py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-amber-600/20 border border-amber-500/40 hover:border-amber-500 text-amber-300 hover:text-amber-200 font-semibold text-sm shadow-md flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
+            <i data-lucide="stop-circle" class="w-4 h-4 text-amber-400"></i>
+            <span>ABORT SHUTDOWN</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Network Configuration & Event Audit Log -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Target Network Details Card -->
+      <div class="glass-card rounded-2xl p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="network" class="w-5 h-5 text-indigo-400"></i>
+            <h3 class="font-bold text-sm tracking-wide text-white">Selected PC Network Details</h3>
+          </div>
+          <span id="cfgRoleLabel" class="text-[11px] font-mono text-emerald-400">Local Host</span>
+        </div>
+
+        <div class="space-y-2.5 text-xs font-mono">
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="text-slate-400">Target Name</span>
+            <span id="cfgName" class="text-white font-bold">Morphy PC (Host Windows 11)</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="text-slate-400">Physical Address (MAC)</span>
+            <span id="cfgMac" class="text-emerald-400 font-bold">F4:B5:20:7A:FA:EF</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="text-slate-400">IPv4 Address</span>
+            <span id="cfgIp" class="text-indigo-300 font-semibold">192.168.254.101</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="text-slate-400">Subnet Broadcast Destination</span>
+            <span id="cfgBroadcast" class="text-slate-300">192.168.254.255</span>
+          </div>
+          <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="text-slate-400">Network Controller</span>
+            <span id="cfgAdapter" class="text-amber-400 truncate max-w-[200px]">Realtek PCIe GbE Family Controller</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Activity Stream / Audit Log -->
+      <div class="glass-card rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="terminal" class="w-5 h-5 text-emerald-400"></i>
+              <h3 class="font-bold text-sm tracking-wide text-white">Event Audit Log</h3>
+            </div>
+            <button onclick="clearClientLog()" class="text-[11px] text-slate-400 hover:text-slate-200 transition">Clear view</button>
+          </div>
+
+          <div id="activityLogContainer" class="mt-3 space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+            <div class="text-xs text-slate-500 font-mono italic p-2 text-center">Awaiting system events...</div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Auto-polling every 4s
+          </span>
+          <span id="lastPolledTime" class="font-mono">Just now</span>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 bg-slate-950/60 py-4 text-center text-xs text-slate-400">
+    <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="shield" class="w-3.5 h-3.5 text-brand-400"></i>
+        <span>SWITCH Controller &bull; Multi-PC Production Edition</span>
+      </div>
+      <div class="text-slate-400 font-mono text-[11px]">
+        Node.js Express &bull; Port 3000
+      </div>
+    </div>
+  </footer>
+
+  <!-- ============================================================== -->
+  <!-- MODALS -->
+  <!-- ============================================================== -->
+
+  <!-- Modal 1: Security PIN Configuration -->
+  <div id="pinModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+    <div class="glass-modal max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-5 animate-scaleUp">
+      <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="lock" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Security Passcode</h3>
+            <p class="text-xs text-slate-400">Enter PIN to authorize actions</p>
+          </div>
+        </div>
+        <button onclick="closePinModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Master PIN</label>
+          <div class="relative">
+            <input 
+              type="password" 
+              id="pinInput" 
+              inputmode="numeric" 
+              pattern="[0-9]*"
+              maxlength="12"
+              placeholder="e.g. 1234" 
+              class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-3 text-center text-lg font-mono tracking-widest text-white outline-none transition"
+              onkeydown="if(event.key === 'Enter') savePin()"
+            />
+            <button type="button" onclick="togglePinVisibility()" class="absolute right-3 top-3.5 text-slate-400 hover:text-slate-200">
+              <i data-lucide="eye" id="pinEyeIcon" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div id="pinErrorMessage" class="text-xs text-rose-400 font-medium mt-1.5 hidden flex items-center gap-1">
+            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+            <span id="pinErrorText">Incorrect PIN.</span>
+          </div>
+        </div>
+
+        <!-- Quick Numeric Keypad for Mobile Phones -->
+        <div class="grid grid-cols-3 gap-2 pt-2">
+          <button type="button" onclick="appendPinDigit('1')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">1</button>
+          <button type="button" onclick="appendPinDigit('2')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">2</button>
+          <button type="button" onclick="appendPinDigit('3')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">3</button>
+          <button type="button" onclick="appendPinDigit('4')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">4</button>
+          <button type="button" onclick="appendPinDigit('5')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">5</button>
+          <button type="button" onclick="appendPinDigit('6')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">6</button>
+          <button type="button" onclick="appendPinDigit('7')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">7</button>
+          <button type="button" onclick="appendPinDigit('8')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">8</button>
+          <button type="button" onclick="appendPinDigit('9')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">9</button>
+          <button type="button" onclick="clearPinInput()" class="py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 font-mono font-semibold text-xs transition uppercase">CLR</button>
+          <button type="button" onclick="appendPinDigit('0')" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-white font-mono font-bold text-base transition">0</button>
+          <button type="button" onclick="backspacePinDigit()" class="py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono font-bold text-base flex items-center justify-center transition">
+            <i data-lucide="delete" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 pt-2">
+        <button type="button" onclick="clearSavedPin()" class="w-1/3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+          Clear Saved
+        </button>
+        <button type="button" id="savePinSubmitBtn" onclick="savePin()" class="w-2/3 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-600/30 transition">
+          Verify & Save PIN
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Power OFF Confirmation Dialog -->
+  <div id="confirmShutdownModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+    <div class="glass-modal max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-5 animate-scaleUp border border-rose-500/30">
+      <div class="flex items-center space-x-3">
+        <div class="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+          <i data-lucide="alert-octagon" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Confirm Shutdown</h3>
+          <p id="confirmModalSubtext" class="text-xs text-rose-300">Graceful Windows power-off</p>
+        </div>
+      </div>
+
+      <div class="bg-rose-950/20 border border-rose-500/20 rounded-xl p-3 text-xs text-slate-300 space-y-1.5 leading-relaxed">
+        <p class="font-medium text-rose-200">Are you sure you want to turn off <span id="confirmDeviceName" class="underline font-bold text-white">this PC</span>?</p>
+        <p class="text-slate-400">A 10-second countdown will start on the computer. You can cancel it during the countdown window using the Abort button.</p>
+      </div>
+
+      <div class="flex items-center space-x-2 pt-2">
+        <button onclick="closeConfirmModal()" class="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+          Nevermind
+        </button>
+        <button onclick="executeShutdown()" class="w-1/2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30 transition flex items-center justify-center gap-1.5">
+          <i data-lucide="power" class="w-3.5 h-3.5"></i>
+          <span>Yes, Shut Down</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Phone Access & QR Code Scanner -->
+  <div id="qrModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+    <div class="glass-modal max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-scaleUp">
+      <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <i data-lucide="smartphone" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Control from Phone</h3>
+            <p class="text-xs text-slate-400">Scan with your phone camera</p>
+          </div>
+        </div>
+        <button onclick="closeQrModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- QR Image Container -->
+      <div class="bg-white p-3.5 rounded-2xl flex items-center justify-center shadow-inner">
+        <img id="qrImageElement" src="" alt="Phone Access QR Code" class="w-48 h-48 object-contain" />
+      </div>
+
+      <div class="space-y-2.5 text-xs">
+        <!-- Public Internet Link -->
+        <div>
+          <div class="text-[10px] font-semibold text-indigo-300 uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span>[1] Public Internet Link (4G/5G/Outside)</span>
+          </div>
+          <div class="p-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
+            <span id="qrUrlDisplay" class="font-mono text-emerald-400 truncate text-[11px]">https://...</span>
+            <button onclick="copyTunnelUrl()" title="Copy Public URL" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Local Wi-Fi Link -->
+        <div>
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span>[2] Home Wi-Fi Link (Same Wi-Fi)</span>
+          </div>
+          <div class="p-2 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-2">
+            <span id="qrLanUrlDisplay" class="font-mono text-indigo-300 truncate text-[11px]">http://...</span>
+            <button onclick="copyLanUrl()" title="Copy Wi-Fi URL" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-2 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-slate-300 text-[11px] leading-relaxed">
+          <span class="font-bold text-white flex items-center gap-1 mb-0.5">
+            <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
+            Install as "SWITCH" App on your Phone:
+          </span>
+          Tap <strong>Share</strong> (iPhone) or <strong>⋮</strong> (Android) ➔ <strong>"Add to Home Screen"</strong>. It launches full-screen without an address bar!
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Remote Power Architecture & FAQ Guide -->
+  <div id="infoModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+    <div class="glass-modal max-w-lg w-full rounded-2xl p-6 shadow-2xl relative space-y-5 animate-scaleUp max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-start justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="help-circle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">How Remote Power Works</h3>
+            <p class="text-xs text-slate-400">Power OFF vs Power ON over the Internet</p>
+          </div>
+        </div>
+        <button onclick="closeInfoModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs leading-relaxed text-slate-300">
+        <!-- Section 1 -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+          <h4 class="font-bold text-emerald-400 flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            1. Turning OFF your PC from your Phone
+          </h4>
+          <p class="text-slate-400">
+            As long as your PC is running, Cloudflare Tunnel securely bridges your phone directly to Windows. Clicking <strong>"SHUT DOWN PC"</strong> triggers <code class="text-rose-300">shutdown /s /t 10</code> and your PC cleanly powers off.
+          </p>
+        </div>
+
+        <!-- Section 2 -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+          <h4 class="font-bold text-amber-300 flex items-center gap-1.5">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i>
+            2. Turning ON your PC when it is completely OFF
+          </h4>
+          <p class="text-slate-400">
+            When your PC is powered off (0W power), Windows and Node.js are stopped, so this PC cannot receive internet commands. To turn it on remotely, choose either of these two standard methods:
+          </p>
+          <div class="space-y-2 pl-2">
+            <div class="border-l-2 border-indigo-500 pl-2">
+              <span class="font-semibold text-white">Method A: Smart Plug ($8) + BIOS AC Restore (Easiest)</span>
+              <p class="text-slate-400 text-[11px] mt-0.5">
+                Plug your PC into a Smart Plug (Tapo / Tuya / Kasa). In your PC BIOS, set <em>"Restore AC Power Loss"</em> to <strong>Power On</strong>. Whenever you want to turn on your PC from outside, toggle the Smart Plug in your phone app!
+              </p>
+            </div>
+            <div class="border-l-2 border-emerald-500 pl-2">
+              <span class="font-semibold text-white">Method B: Always-On Device on Home Wi-Fi</span>
+              <p class="text-slate-400 text-[11px] mt-0.5">
+                Run SWITCH on an old Android phone, Raspberry Pi, or home server on your home Wi-Fi. That device stays online 24/7 and broadcasts the Wake-on-LAN packet to your PC's MAC address.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button onclick="closeInfoModal()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition">
+          Got it!
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: SWITCH Agent Setup for Remote PCs (Fixes Error 53) -->
+  <div id="agentSetupModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+    <div class="glass-modal max-w-lg w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-scaleUp max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-start justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Enable 1-Click Remote Shutdown</span>
+              <span class="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">Fixes Error 53</span>
+            </h3>
+            <p class="text-xs text-slate-400">For <span id="agentModalTargetName" class="text-white font-semibold">RHU IT Gaming PC</span></p>
+          </div>
+        </div>
+        <button onclick="closeAgentSetupModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Why this is needed explanation -->
+      <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed space-y-1">
+        <div class="font-bold flex items-center gap-1.5 text-amber-300">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          Why does Windows show Error 53 across subnets?
+        </div>
+        <p class="text-[11px] text-slate-300">
+          Windows 11 blocks incoming remote shutdown commands (RPC/SMB) between different network subnets. Running SWITCH Agent on that PC connects outbound to this controller, allowing instantaneous graceful shutdown with zero permission blocks!
+        </p>
+      </div>
+
+      <!-- Setup Options -->
+      <div class="space-y-3 text-xs">
+        <!-- Option 1: 1-Line PowerShell -->
+        <div class="p-4 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-white text-xs flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[10px] font-mono">1</span>
+              Fastest (10 Seconds) - Run in PowerShell
+            </span>
+            <span class="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Recommended</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Open PowerShell on <strong id="agentTargetNamePowerShell" class="text-slate-200">RHU IT Gaming PC</strong> and paste this command:</p>
+          <div class="relative">
+            <div id="agentOneLinerDisplay" class="p-2.5 pr-20 rounded-lg bg-slate-950 font-mono text-emerald-300 text-[11px] overflow-x-auto whitespace-pre border border-slate-800">irm http://192.168.254.101:3000/agent | iex</div>
+            <button onclick="copyAgentCommand()" class="absolute right-1.5 top-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] shadow flex items-center gap-1 transition">
+              <i data-lucide="copy" class="w-3 h-3"></i>
+              <span id="copyCmdText">Copy</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Option 2: Desktop Batch File -->
+        <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-white text-xs flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-slate-700 text-white flex items-center justify-center text-[10px] font-mono">2</span>
+              Desktop Launcher File
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            We already created <strong class="text-white">FOR_GAMING_PC_switch-agent.bat</strong> on this Host PC's Desktop. Copy it to the other PC and double-click it.
+          </p>
+          <div class="flex items-center gap-2 pt-1">
+            <a href="/api/agent/download" download="switch-agent.bat" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span>Download switch-agent.bat</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Option 3: Auto-start Permanently on Boot -->
+        <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1">
+          <div class="font-semibold text-slate-200 text-xs flex items-center gap-1.5">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-brand-400"></i>
+            Permanent Setup (Starts Automatically with Windows)
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            When you run the script, press <strong class="text-emerald-400">[Y]</strong> when prompted to install to Windows Startup. The agent will run silently in the background forever whenever that PC boots up, giving you instant 1-click remote shutdown anytime!
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button onclick="closeAgentSetupModal()" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs transition shadow-lg shadow-brand-600/20">
+          Got it!
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Why PC Won't Turn On (Wake-on-LAN Troubleshooting & Fixes) -->
+  <div id="wolGuideModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+    <div class="glass-modal max-w-lg w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-scaleUp max-h-[92vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-start justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Why Won't the PC Turn On?</span>
+              <span class="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">WoL Guide</span>
+            </h3>
+            <p class="text-xs text-slate-400">Troubleshooting Wake-on-LAN for <span id="wolModalTargetName" class="text-white font-semibold">RHU IT Gaming PC</span></p>
+          </div>
+        </div>
+        <button onclick="closeWolGuideModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-2">
+        <p class="text-[11px]">
+          Wake-on-LAN requires standby power and network routing. Check these <strong>4 critical reasons</strong> why a PC doesn't wake up:
+        </p>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <!-- 1. The Physical Ethernet Light Check -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-indigo-500/30 space-y-1.5">
+          <div class="font-bold text-white flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[10px] font-mono">1</span>
+            <span>Check Physical Ethernet Light (Most Important!)</span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            When this PC is turned off, look at the back where the Ethernet network cable plugs in:
+          </p>
+          <div class="p-2 rounded-lg bg-slate-950 font-mono text-[11px] space-y-1">
+            <div class="text-emerald-400">🟢 LED light is ON or BLINKING: Network chip is powered and ready!</div>
+            <div class="text-rose-400">🔴 LED light is COMPLETELY OFF: Motherboard has cut power. It will NEVER wake until fixed in BIOS/Windows (see below).</div>
+          </div>
+        </div>
+
+        <!-- 2. Router / Subnet Barrier (Deco Mesh / TP-Link) -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-amber-500/30 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-white flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-mono">2</span>
+              <span>Router Network Barrier (Different Subnet)</span>
+            </span>
+            <span class="text-[10px] font-semibold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Common Issue</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Your Gaming PC is on <code class="text-amber-300">192.168.68.62</code> (TP-Link router) while the Host is on <code class="text-indigo-300">192.168.254.x</code>. Routers block broadcast signals between subnets!
+          </p>
+          <div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 space-y-1">
+            <strong>Recommended Fix:</strong> In your TP-Link Deco / Router app, switch <em>Operation Mode</em> to <strong>"Access Point (AP) Mode"</strong>. All PCs will share the same network, allowing WoL magic packets to pass freely!
+          </div>
+        </div>
+
+        <!-- 3. Windows 11 Fast Startup & Realtek Driver -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 space-y-2">
+          <span class="font-bold text-white flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-mono">3</span>
+            <span>Windows 11 Fast Startup & Realtek Driver Fix</span>
+          </span>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Windows 11 "Fast Startup" cuts power to network cards on shutdown. We created an automated 1-click batch fix on your Desktop:
+          </p>
+          <div class="p-2 rounded-lg bg-slate-950 font-mono text-[11px] text-emerald-300 border border-slate-800">
+            Run on Gaming PC: ENABLE_WAKE_ON_LAN_FOR_GAMING_PC.bat
+          </div>
+        </div>
+
+        <!-- 4. Motherboard BIOS Settings -->
+        <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+          <span class="font-bold text-white flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-slate-700 text-white flex items-center justify-center text-[10px] font-mono">4</span>
+            <span>Motherboard BIOS Checklist</span>
+          </span>
+          <ul class="text-[11px] text-slate-400 list-disc list-inside space-y-1">
+            <li><strong>Power On By PCI-E / Wake on LAN:</strong> Set to <strong class="text-white">ENABLED</strong>.</li>
+            <li><strong>ErP / EuP Ready:</strong> Set to <strong class="text-white">DISABLED</strong> (ErP shuts off Ethernet power completely).</li>
+          </ul>
+        </div>
+
+        <!-- 5. 100% Guaranteed Alternative: Smart Plug -->
+        <div class="p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/60 to-purple-950/60 border border-indigo-500/40 space-y-1.5">
+          <div class="font-bold text-white flex items-center gap-1.5">
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i>
+            <span>100% Guaranteed Method from Anywhere: Smart Plug</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            If your PC was unplugged or router blocks WoL, plug your Gaming PC into a $8 Smart Plug (Tapo / Tuya). In your PC BIOS, set <em>"Restore AC Power Loss"</em> to <strong>Power On</strong>. Toggling the plug on your phone turns on your PC every single time!
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button onclick="closeWolGuideModal()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition">
+          Close Guide
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Add New PC Target Modal -->
+  <div id="addDeviceModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm hidden">
+    <div class="glass-modal max-w-sm w-full rounded-2xl p-6 shadow-2xl relative space-y-4 animate-scaleUp">
+      <div class="flex items-start justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="plus-circle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Add Target PC</h3>
+            <p class="text-xs text-slate-400">Register another computer</p>
+          </div>
+        </div>
+        <button onclick="closeAddDeviceModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">PC Name</label>
+          <input type="text" id="newDevName" placeholder="e.g. Office Desktop" class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-white outline-none" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">MAC Address (Physical Address)</label>
+          <input type="text" id="newDevMac" placeholder="e.g. A0:AD:9F:11:59:55" class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 font-mono rounded-xl px-3 py-2 text-emerald-400 outline-none uppercase" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">IPv4 Address</label>
+          <input type="text" id="newDevIp" placeholder="e.g. 192.168.68.62" class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 font-mono rounded-xl px-3 py-2 text-white outline-none" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Subnet Broadcast Destination</label>
+          <input type="text" id="newDevBroadcast" placeholder="e.g. 192.168.68.255" class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 font-mono rounded-xl px-3 py-2 text-white outline-none" />
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Network Adapter Name (Optional)</label>
+          <input type="text" id="newDevAdapter" placeholder="e.g. Realtek 2.5GbE" class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-white outline-none" />
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 pt-2">
+        <button onclick="closeAddDeviceModal()" class="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+          Cancel
+        </button>
+        <button onclick="submitNewDevice()" class="w-1/2 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-600/30 transition">
+          Save PC
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm w-full"></div>
+
+  <!-- Application Logic -->
+  <script>
+    let currentPin = localStorage.getItem('SWITCH_PIN') || '1234';
+    let isPendingShutdown = false;
+    let countdownInterval = null;
+    let pollInterval = null;
+    let activeTunnelUrl = null;
+    let activeLanUrl = null;
+    let registeredDevices = [];
+    let currentActiveDevice = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      updatePinButtonUi();
+      fetchDevices();
+      fetchStatus(true);
+
+      pollInterval = setInterval(() => {
+        fetchStatus(false);
+      }, 4000);
+    });
+
+    function showToast(message, type = 'info', duration = 3500) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const colors = {
+        success: 'bg-emerald-950/90 border-emerald-500 text-emerald-200',
+        error: 'bg-rose-950/90 border-rose-500 text-rose-200',
+        warning: 'bg-amber-950/90 border-amber-500 text-amber-200',
+        info: 'bg-indigo-950/90 border-indigo-500 text-indigo-200'
+      };
+
+      const icons = {
+        success: 'check-circle-2',
+        error: 'alert-triangle',
+        warning: 'alert-circle',
+        info: 'info'
+      };
+
+      toast.className = `pointer-events-auto border backdrop-blur-md rounded-xl p-3.5 shadow-2xl flex items-center space-x-3 text-xs font-medium transform transition-all duration-300 translate-y-3 opacity-0 ${colors[type] || colors.info}`;
+      toast.innerHTML = `
+        <i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 flex-shrink-0"></i>
+        <div class="flex-1">${message}</div>
+      `;
+
+      container.appendChild(toast);
+      lucide.createIcons({ root: toast });
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    function appendLogEntry(action, details, success = true, timestamp = new Date()) {
+      const container = document.getElementById('activityLogContainer');
+      if (container.querySelector('.italic')) {
+        container.innerHTML = '';
+      }
+
+      const timeStr = timestamp.toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `p-2 rounded-lg bg-slate-900/60 border ${success ? 'border-slate-800' : 'border-rose-900/50'} text-xs font-mono flex items-start justify-between gap-2`;
+      const badgeColor = success ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10';
+
+      entry.innerHTML = `
+        <div class="space-y-0.5 overflow-hidden">
+          <div class="flex items-center space-x-2">
+            <span class="text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase ${badgeColor}">${action}</span>
+            <span class="text-slate-300 font-medium truncate">${details}</span>
+          </div>
+        </div>
+        <span class="text-[10px] text-slate-500 flex-shrink-0">${timeStr}</span>
+      `;
+
+      container.insertBefore(entry, container.firstChild);
+      while (container.children.length > 15) {
+        container.removeChild(container.lastChild);
+      }
+    }
+
+    function clearClientLog() {
+      const container = document.getElementById('activityLogContainer');
+      container.innerHTML = '<div class="text-xs text-slate-500 font-mono italic p-2 text-center">Log cleared. Awaiting new events...</div>';
+    }
+
+    function copyToClipboard(text, label) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(`${label} copied to clipboard!`, 'success');
+      }).catch(() => {
+        showToast(`Failed to copy: ${text}`, 'error');
+      });
+    }
+
+    function copyTunnelUrl() {
+      if (activeTunnelUrl) {
+        copyToClipboard(activeTunnelUrl, 'Public Phone URL');
+      }
+    }
+
+    function copyLanUrl() {
+      if (activeLanUrl) {
+        copyToClipboard(activeLanUrl, 'Home Wi-Fi URL');
+      } else {
+        copyToClipboard(window.location.origin, 'Local URL');
+      }
+    }
+
+    // Agent Setup Modal Handlers
+    async function openAgentSetupModal() {
+      const modal = document.getElementById('agentSetupModal');
+      const targetName = currentActiveDevice ? currentActiveDevice.name : 'RHU IT Gaming PC';
+      document.getElementById('agentModalTargetName').textContent = targetName;
+      document.getElementById('agentTargetNamePowerShell').textContent = targetName;
+
+      const cmdBox = document.getElementById('agentOneLinerDisplay');
+      const origin = window.location.origin;
+      cmdBox.textContent = `irm ${origin}/agent | iex`;
+
+      try {
+        const res = await fetch('/api/agent/setup-info');
+        const data = await res.json();
+        if (data.success) {
+          const isHttps = window.location.protocol === 'https:';
+          if (isHttps && data.powershellPublic) {
+            cmdBox.textContent = data.powershellPublic;
+          } else {
+            cmdBox.textContent = data.powershellLan || `irm ${origin}/agent | iex`;
+          }
+        }
+      } catch (e) {}
+
+      modal.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeAgentSetupModal() {
+      document.getElementById('agentSetupModal').classList.add('hidden');
+    }
+
+    function copyAgentCommand() {
+      const cmd = document.getElementById('agentOneLinerDisplay').textContent.trim();
+      navigator.clipboard.writeText(cmd).then(() => {
+        showToast('PowerShell command copied to clipboard!', 'success');
+        const txt = document.getElementById('copyCmdText');
+        if (txt) {
+          txt.textContent = 'Copied!';
+          setTimeout(() => { txt.textContent = 'Copy'; }, 2000);
+        }
+      }).catch(() => {
+        showToast(`Please copy manually: ${cmd}`, 'error');
+      });
+    }
+
+    // WoL Guide Modal Handlers
+    function openWolGuideModal() {
+      const modal = document.getElementById('wolGuideModal');
+      const targetName = currentActiveDevice ? currentActiveDevice.name : 'RHU IT Gaming PC';
+      document.getElementById('wolModalTargetName').textContent = targetName;
+      modal.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeWolGuideModal() {
+      document.getElementById('wolGuideModal').classList.add('hidden');
+    }
+
+    // Devices & Switcher Logic
+    async function fetchDevices() {
+      try {
+        const res = await fetch('/api/devices');
+        const data = await res.json();
+        if (data.success && data.devices) {
+          registeredDevices = data.devices;
+          renderDeviceTabs();
+          
+          // Select saved active device or default to first
+          const savedDevId = localStorage.getItem('SWITCH_ACTIVE_DEV_ID');
+          let selected = registeredDevices.find(d => d.id === savedDevId) || registeredDevices[0];
+          setActiveDevice(selected);
+        }
+      } catch (err) {
+        console.error('Failed to load devices:', err);
+      }
+    }
+
+    function renderDeviceTabs() {
+      const container = document.getElementById('deviceTabsContainer');
+      container.innerHTML = '';
+
+      registeredDevices.forEach(dev => {
+        const isActive = currentActiveDevice && currentActiveDevice.id === dev.id;
+        const btn = document.createElement('button');
+        
+        const activeClasses = 'bg-brand-600 text-white font-bold shadow-md shadow-brand-600/30 border border-brand-500';
+        const inactiveClasses = 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80';
+
+        btn.className = `px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition ${isActive ? activeClasses : inactiveClasses}`;
+        
+        const iconName = dev.isHost ? 'monitor' : (dev.name.toLowerCase().includes('game') ? 'gamepad-2' : 'server');
+        const agentStatusDot = (!dev.isHost && dev.agentConnected)
+          ? '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Agent Online"></span>'
+          : (!dev.isHost ? '<span class="w-1.5 h-1.5 rounded-full bg-slate-600 ml-0.5" title="Agent Offline"></span>' : '');
+
+        btn.innerHTML = `
+          <i data-lucide="${iconName}" class="w-3.5 h-3.5 ${isActive ? 'text-emerald-300' : 'text-slate-400'}"></i>
+          <span>${dev.name}</span>
+          ${dev.isHost ? '<span class="text-[9px] px-1 py-0.2 rounded bg-black/30 text-emerald-300 font-mono">HOST</span>' : agentStatusDot}
+        `;
+
+        btn.onclick = () => setActiveDevice(dev);
+        container.appendChild(btn);
+      });
+
+      lucide.createIcons({ root: container });
+    }
+
+    function setActiveDevice(dev) {
+      if (!dev) return;
+      currentActiveDevice = dev;
+      localStorage.setItem('SWITCH_ACTIVE_DEV_ID', dev.id);
+      renderDeviceTabs();
+
+      // Update UI displays
+      document.getElementById('targetNameHeading').textContent = dev.name;
+      document.getElementById('targetRoleBadge').innerHTML = `
+        <i data-lucide="${dev.isHost ? 'monitor' : 'server'}" class="w-3.5 h-3.5 mr-1.5 ${dev.isHost ? 'text-emerald-400' : 'text-indigo-400'}"></i>
+        ${dev.isHost ? 'Local Host Windows 11' : 'Remote Network Target'}
+      `;
+      document.getElementById('targetIpBadge').textContent = dev.ip || 'DHCP';
+      document.getElementById('targetAdapterDescription').textContent = dev.adapter || 'Network Controller';
+      document.getElementById('cardMacDisplay').textContent = dev.mac;
+
+      document.getElementById('powerOnTargetLabel').textContent = dev.name;
+      document.getElementById('powerOffTargetLabel').textContent = dev.name;
+      document.getElementById('abortTargetLabel').textContent = dev.name;
+
+      // Handle Remote Agent Banner & Action Card commands
+      const agentBanner = document.getElementById('remoteAgentBanner');
+      const agentIcon = document.getElementById('remoteAgentStatusIcon');
+      const agentText = document.getElementById('remoteAgentStatusText');
+      const agentSub = document.getElementById('remoteAgentSubText');
+      const btnConnect = document.getElementById('btnConnectAgent');
+
+      if (dev.isHost) {
+        if (agentBanner) agentBanner.classList.add('hidden');
+        document.getElementById('cardShutdownCommand').textContent = 'shutdown.exe /s /t 10';
+        document.getElementById('cardAbortCommand').textContent = 'shutdown.exe /a';
+      } else {
+        if (agentBanner) {
+          agentBanner.classList.remove('hidden');
+          if (dev.agentConnected) {
+            agentIcon.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+            agentText.textContent = 'SWITCH Agent Connected';
+            agentText.className = 'text-xs font-semibold text-emerald-300';
+            agentSub.textContent = '• 1-Click Graceful Shutdown active (No Error 53)';
+            btnConnect.innerHTML = '<i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i><span>Agent Ready</span>';
+            btnConnect.className = 'px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1';
+          } else {
+            agentIcon.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+            agentText.textContent = 'SWITCH Agent Offline';
+            agentText.className = 'text-xs font-semibold text-amber-300';
+            agentSub.textContent = '• Connect agent on RHU IT Gaming PC to avoid Windows Error 53';
+            btnConnect.innerHTML = '<i data-lucide="zap" class="w-3 h-3 text-amber-400"></i><span>Connect Agent (Fix Error 53)</span>';
+            btnConnect.className = 'px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition';
+          }
+        }
+
+        if (dev.agentConnected) {
+          document.getElementById('cardShutdownCommand').textContent = 'SWITCH Agent (Local Exec: shutdown /s /t 10)';
+          document.getElementById('cardAbortCommand').textContent = 'SWITCH Agent (Local Exec: shutdown /a)';
+        } else {
+          document.getElementById('cardShutdownCommand').textContent = `Waiting for Agent / Fallback: \\\\${dev.ip || dev.name}`;
+          document.getElementById('cardAbortCommand').textContent = `Waiting for Agent / Fallback: \\\\${dev.ip || dev.name}`;
+        }
+      }
+
+      // Details card
+      document.getElementById('cfgName').textContent = dev.name;
+      document.getElementById('cfgMac').textContent = dev.mac;
+      document.getElementById('cfgIp').textContent = dev.ip || 'Dynamic DHCP';
+      document.getElementById('cfgBroadcast').textContent = dev.broadcast || '255.255.255.255';
+      document.getElementById('cfgAdapter').textContent = dev.adapter || 'Gigabit Controller';
+      document.getElementById('cfgRoleLabel').textContent = dev.isHost ? 'Primary Host' : 'Remote Client';
+
+      // Check reachability
+      checkDevicePing(dev);
+      lucide.createIcons();
+    }
+
+    async function checkDevicePing(dev) {
+      const pill = document.getElementById('targetReachabilityPill');
+      pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span><span>Pinging...</span>';
+      pill.className = 'text-xs font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1';
+
+      try {
+        const pingIp = dev.ip || '127.0.0.1';
+        const res = await fetch(`/api/ping-check?ip=${encodeURIComponent(pingIp)}`);
+        const data = await res.json();
+
+        if (data.reachable) {
+          pill.className = 'text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1';
+          pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>Online ${data.latency ? '(' + data.latency + ')' : ''}</span>`;
+        } else {
+          pill.className = 'text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1';
+          pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Standby / Off</span>';
+        }
+      } catch (e) {
+        pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Unknown</span>';
+      }
+    }
+
+    // Add Device Modal
+    function openAddDeviceModal() {
+      document.getElementById('addDeviceModal').classList.remove('hidden');
+    }
+    function closeAddDeviceModal() {
+      document.getElementById('addDeviceModal').classList.add('hidden');
+    }
+
+    async function submitNewDevice() {
+      const pin = getPinOrPrompt();
+      if (!pin) return;
+
+      const name = document.getElementById('newDevName').value.trim();
+      const mac = document.getElementById('newDevMac').value.trim();
+      const ip = document.getElementById('newDevIp').value.trim();
+      const broadcast = document.getElementById('newDevBroadcast').value.trim();
+      const adapter = document.getElementById('newDevAdapter').value.trim();
+
+      if (!name || !mac) {
+        showToast('Please fill in Name and MAC address.', 'warning');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/devices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, name, mac, ip, broadcast, adapter })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(`PC "${name}" added successfully!`, 'success');
+          closeAddDeviceModal();
+          fetchDevices();
+        } else {
+          showToast(data.error || 'Failed to add device.', 'error');
+        }
+      } catch (err) {
+        showToast('Network error while saving device.', 'error');
+      }
+    }
+
+    // QR Modal
+    async function openQrModal() {
+      const modal = document.getElementById('qrModal');
+      const qrImg = document.getElementById('qrImageElement');
+      const urlText = document.getElementById('qrUrlDisplay');
+      const lanUrlText = document.getElementById('qrLanUrlDisplay');
+
+      if (lanUrlText) {
+        lanUrlText.textContent = activeLanUrl || ('http://' + window.location.hostname + ':3000');
+      }
+      if (urlText) {
+        urlText.textContent = activeTunnelUrl || 'Connecting tunnel...';
+      }
+
+      try {
+        const res = await fetch('/api/tunnel-qr');
+        const data = await res.json();
+        if (data.success && data.qr) {
+          qrImg.src = data.qr;
+          urlText.textContent = data.url;
+        }
+      } catch (err) {}
+      modal.classList.remove('hidden');
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+    }
+
+    function openInfoModal() {
+      document.getElementById('infoModal').classList.remove('hidden');
+    }
+    function closeInfoModal() {
+      document.getElementById('infoModal').classList.add('hidden');
+    }
+
+    // PIN Management
+    function openPinModal() {
+      const modal = document.getElementById('pinModal');
+      const input = document.getElementById('pinInput');
+      input.value = currentPin || '';
+      document.getElementById('pinErrorMessage').classList.add('hidden');
+      modal.classList.remove('hidden');
+      input.focus();
+    }
+    function closePinModal() {
+      document.getElementById('pinModal').classList.add('hidden');
+    }
+    function appendPinDigit(digit) {
+      const input = document.getElementById('pinInput');
+      input.value = (input.value || '') + digit;
+    }
+    function clearPinInput() {
+      document.getElementById('pinInput').value = '';
+    }
+    function backspacePinDigit() {
+      const input = document.getElementById('pinInput');
+      input.value = input.value.slice(0, -1);
+    }
+    function togglePinVisibility() {
+      const input = document.getElementById('pinInput');
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      const eyeIcon = document.getElementById('pinEyeIcon');
+      eyeIcon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
+      lucide.createIcons();
+    }
+
+    async function savePin() {
+      const input = document.getElementById('pinInput');
+      const pin = input.value.trim();
+      const errBox = document.getElementById('pinErrorMessage');
+      const errText = document.getElementById('pinErrorText');
+      const btn = document.getElementById('savePinSubmitBtn');
+
+      if (!pin) {
+        errText.textContent = 'Please enter a PIN passcode.';
+        errBox.classList.remove('hidden');
+        input.parentElement.classList.add('shake');
+        setTimeout(() => input.parentElement.classList.remove('shake'), 400);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Verifying...';
+
+      try {
+        const res = await fetch('/api/verify-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          currentPin = pin;
+          localStorage.setItem('SWITCH_PIN', pin);
+          updatePinButtonUi();
+          closePinModal();
+          showToast('Passcode verified and saved.', 'success');
+        } else {
+          errText.textContent = data.error || 'Incorrect security PIN.';
+          errBox.classList.remove('hidden');
+          input.parentElement.classList.add('shake');
+          setTimeout(() => input.parentElement.classList.remove('shake'), 400);
+        }
+      } catch (err) {
+        errText.textContent = 'Network error contacting controller.';
+        errBox.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Verify & Save PIN';
+      }
+    }
+
+    function clearSavedPin() {
+      currentPin = '';
+      localStorage.removeItem('SWITCH_PIN');
+      document.getElementById('pinInput').value = '';
+      updatePinButtonUi();
+      closePinModal();
+      showToast('Saved PIN cleared.', 'info');
+    }
+
+    function updatePinButtonUi() {
+      const btnText = document.getElementById('pinBtnText');
+      const icon = document.getElementById('pinIcon');
+      if (currentPin) {
+        btnText.textContent = 'PIN Saved';
+        icon.className = 'w-3.5 h-3.5 text-emerald-400';
+      } else {
+        btnText.textContent = 'Set PIN';
+        icon.className = 'w-3.5 h-3.5 text-amber-400';
+      }
+    }
+
+    function getPinOrPrompt() {
+      if (currentPin) return currentPin;
+      openPinModal();
+      showToast('Please enter your security PIN to authorize this command.', 'warning');
+      return null;
+    }
+
+    // Status Fetching
+    async function fetchStatus(isManual = false) {
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (isManual) refreshIcon.classList.add('animate-spin');
+
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        document.getElementById('connectionPill').className = 'flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium';
+        document.getElementById('connectionText').textContent = 'ONLINE';
+        document.getElementById('statUptime').textContent = data.uptimeFormatted || '--';
+        document.getElementById('statServerTime').textContent = data.serverTimeFormatted ? data.serverTimeFormatted.split(',')[1]?.trim() : '--';
+        
+        if (data.hostInfo) {
+          document.getElementById('statMemory').textContent = `${data.hostInfo.memoryFreeMb} MB (${data.hostInfo.memoryUsedPercent}% used)`;
+        }
+
+        if (data.network && data.network.lanUrl) {
+          activeLanUrl = data.network.lanUrl;
+        }
+
+        // Tunnel / Cloud Banner
+        if (data.tunnel && data.tunnel.active && data.tunnel.publicUrl) {
+          activeTunnelUrl = data.tunnel.publicUrl;
+          document.getElementById('publicTunnelBanner').classList.remove('hidden');
+          const link = document.getElementById('tunnelUrlLink');
+          link.href = data.tunnel.publicUrl;
+          link.textContent = data.tunnel.publicUrl;
+          const labelSpan = document.querySelector('#publicTunnelBanner span.font-semibold');
+          if (labelSpan && data.cloud) {
+            labelSpan.textContent = 'Permanent Vercel URL:';
+          }
+        } else {
+          document.getElementById('publicTunnelBanner').classList.add('hidden');
+        }
+
+        // Sync live agent status
+        if (data.devices) {
+          registeredDevices = data.devices;
+          renderDeviceTabs();
+          if (currentActiveDevice) {
+            const updated = registeredDevices.find(d => d.id === currentActiveDevice.id);
+            if (updated) {
+              const wasConnected = currentActiveDevice.agentConnected;
+              currentActiveDevice = updated;
+              const agentBanner = document.getElementById('remoteAgentBanner');
+              const agentIcon = document.getElementById('remoteAgentStatusIcon');
+              const agentText = document.getElementById('remoteAgentStatusText');
+              const agentSub = document.getElementById('remoteAgentSubText');
+              const btnConnect = document.getElementById('btnConnectAgent');
+
+              if (!updated.isHost && agentBanner) {
+                agentBanner.classList.remove('hidden');
+                if (updated.agentConnected) {
+                  agentIcon.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+                  agentText.textContent = 'SWITCH Agent Connected';
+                  agentText.className = 'text-xs font-semibold text-emerald-300';
+                  agentSub.textContent = '• 1-Click Graceful Shutdown active (No Error 53)';
+                  btnConnect.innerHTML = '<i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i><span>Agent Ready</span>';
+                  btnConnect.className = 'px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1';
+                  document.getElementById('cardShutdownCommand').textContent = 'SWITCH Agent (Local Exec: shutdown /s /t 10)';
+                  document.getElementById('cardAbortCommand').textContent = 'SWITCH Agent (Local Exec: shutdown /a)';
+                  if (!wasConnected) {
+                    showToast(`SWITCH Agent connected on ${updated.name}!`, 'success');
+                  }
+                } else {
+                  agentIcon.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+                  agentText.textContent = 'SWITCH Agent Offline';
+                  agentText.className = 'text-xs font-semibold text-amber-300';
+                  agentSub.textContent = '• Connect agent on RHU IT Gaming PC to avoid Windows Error 53';
+                  btnConnect.innerHTML = '<i data-lucide="zap" class="w-3 h-3 text-amber-400"></i><span>Connect Agent (Fix Error 53)</span>';
+                  btnConnect.className = 'px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition';
+                  document.getElementById('cardShutdownCommand').textContent = `Waiting for Agent / Fallback: \\\\${updated.ip || updated.name}`;
+                  document.getElementById('cardAbortCommand').textContent = `Waiting for Agent / Fallback: \\\\${updated.ip || updated.name}`;
+                }
+                lucide.createIcons();
+              }
+            }
+          }
+        }
+
+        // Check if selected PC has pending shutdown
+        if (currentActiveDevice && data.pendingShutdowns && data.pendingShutdowns[currentActiveDevice.id]) {
+          handleShutdownState(data.pendingShutdowns[currentActiveDevice.id]);
+        } else {
+          handleShutdownState(null);
+        }
+
+        document.getElementById('lastPolledTime').textContent = new Date().toLocaleTimeString();
+      } catch (err) {
+        document.getElementById('connectionPill').className = 'flex items-center space-x-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-medium';
+        document.getElementById('connectionText').textContent = 'OFFLINE';
+      } finally {
+        if (isManual) {
+          setTimeout(() => refreshIcon.classList.remove('animate-spin'), 500);
+        }
+      }
+    }
+
+    function handleShutdownState(state) {
+      const banner = document.getElementById('shutdownAlertBanner');
+      const counterEl = document.getElementById('countdownNumber');
+      const devNameEl = document.getElementById('shutdownDeviceNameDisplay');
+
+      if (state && state.pending && state.remainingSeconds > 0) {
+        banner.classList.remove('hidden');
+        counterEl.textContent = `${state.remainingSeconds}s`;
+        if (currentActiveDevice) devNameEl.textContent = currentActiveDevice.name;
+
+        if (!isPendingShutdown) {
+          isPendingShutdown = true;
+          if (countdownInterval) clearInterval(countdownInterval);
+          let currentSec = state.remainingSeconds;
+          countdownInterval = setInterval(() => {
+            currentSec -= 1;
+            if (currentSec <= 0) {
+              clearInterval(countdownInterval);
+              banner.classList.add('hidden');
+              isPendingShutdown = false;
+            } else {
+              counterEl.textContent = `${currentSec}s`;
+            }
+          }, 1000);
+        }
+      } else {
+        banner.classList.add('hidden');
+        if (countdownInterval) clearInterval(countdownInterval);
+        isPendingShutdown = false;
+      }
+    }
+
+    // WoL Action
+    async function triggerWakeOnLan() {
+      const pin = getPinOrPrompt();
+      if (!pin || !currentActiveDevice) return;
+
+      const btn = document.getElementById('btnPowerOn');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>BROADCASTING PACKET...</span>';
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/wake', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, deviceId: currentActiveDevice.id })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(`Wake-on-LAN magic packet sent to ${currentActiveDevice.name}!`, 'success');
+          appendLogEntry('POWER ON', `WoL sent to ${currentActiveDevice.name} (${currentActiveDevice.mac})`, true);
+          setTimeout(() => checkDevicePing(currentActiveDevice), 3000);
+        } else if (res.status === 401 || res.status === 403) {
+          showToast(data.error || 'Invalid PIN code.', 'error');
+          openPinModal();
+        } else {
+          showToast(data.error || 'Failed to send packet.', 'error');
+          appendLogEntry('POWER ON', `Error: ${data.error}`, false);
+        }
+      } catch (err) {
+        showToast(`Request failed: ${err.message}`, 'error');
+        appendLogEntry('POWER ON', `Network fault: ${err.message}`, false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        lucide.createIcons();
+      }
+    }
+
+    // Shutdown Action
+    function confirmShutdownModal() {
+      const pin = getPinOrPrompt();
+      if (!pin || !currentActiveDevice) return;
+      document.getElementById('confirmDeviceName').textContent = currentActiveDevice.name;
+      document.getElementById('confirmShutdownModal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmShutdownModal').classList.add('hidden');
+    }
+
+    async function executeShutdown() {
+      closeConfirmModal();
+      const pin = getPinOrPrompt();
+      if (!pin || !currentActiveDevice) return;
+
+      const btn = document.getElementById('btnPowerOff');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>INITIATING SHUTDOWN...</span>';
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/shutdown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, deviceId: currentActiveDevice.id, delay: 10 })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(data.message || `Shutdown initiated for ${currentActiveDevice.name}! Power off in ${data.delaySeconds}s.`, 'warning');
+          appendLogEntry('SHUTDOWN', `Shutdown signal dispatched to ${currentActiveDevice.name}`, true);
+          fetchStatus(true);
+        } else if (res.status === 401 || res.status === 403) {
+          showToast(data.error || 'Invalid PIN code.', 'error');
+          openPinModal();
+        } else if (data.errorCode === 53 || data.isAgentOffline) {
+          showToast(`Windows blocked remote shutdown (Error 53). Start SWITCH Agent on ${currentActiveDevice.name} to enable 1-click shutdown.`, 'error');
+          appendLogEntry('SHUTDOWN', `Blocked across subnets on ${currentActiveDevice.name} (Error 53)`, false);
+          openAgentSetupModal();
+        } else {
+          showToast(data.error || 'Shutdown execution failed.', 'error');
+          appendLogEntry('SHUTDOWN', `Failed on ${currentActiveDevice.name}: ${data.error}`, false);
+        }
+      } catch (err) {
+        showToast(`Request failed: ${err.message}`, 'error');
+        appendLogEntry('SHUTDOWN', `Network error: ${err.message}`, false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        lucide.createIcons();
+      }
+    }
+
+    // Abort Action
+    async function triggerAbortShutdown() {
+      const pin = getPinOrPrompt();
+      if (!pin || !currentActiveDevice) return;
+
+      const btn = document.getElementById('btnAbort');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>ABORTING...</span>';
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/abort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, deviceId: currentActiveDevice.id })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(`Shutdown cancelled for ${currentActiveDevice.name}!`, 'success');
+          appendLogEntry('ABORT', `Shutdown abort command executed for ${currentActiveDevice.name}`, true);
+          document.getElementById('shutdownAlertBanner').classList.add('hidden');
+          if (countdownInterval) clearInterval(countdownInterval);
+          isPendingShutdown = false;
+          fetchStatus(true);
+        } else if (res.status === 401 || res.status === 403) {
+          showToast(data.error || 'Invalid PIN code.', 'error');
+          openPinModal();
+        } else {
+          showToast(data.error || 'Abort execution failed.', 'error');
+          appendLogEntry('ABORT', `Failed: ${data.error}`, false);
+        }
+      } catch (err) {
+        showToast(`Request failed: ${err.message}`, 'error');
+        appendLogEntry('ABORT', `Network error: ${err.message}`, false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        lucide.createIcons();
+      }
+    }
+  </script>
+</body>
+</html>
